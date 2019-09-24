@@ -1,7 +1,6 @@
 # Strassen matrix multiplication algorithm on top of Spark
 
-Basic ALGORITHM
----
+### Basic Algorithm
 To multiply two matrices of size n*n (where n=2^p) A and B:
 
 1. Divide A and B to four sub-matrices of size n/2
@@ -24,8 +23,7 @@ To multiply two matrices of size n*n (where n=2^p) A and B:
 
 The implementation stages:
 
-Matrices preparation  
----
+### Matrices preparation  
 The Strassen alogrithm is limited to square matrices of size n where n=2^p. In order to deal with any size,
 we can pad the matrices with zero rows and columns up until it reaches the nearest power of 2. 
 If the recursion level is smaller log2(n), the matrices will be padded to smaller dimensions, following this:
@@ -37,8 +35,8 @@ This padding can also be applied to a stop condition given in sub-matrix size, f
 2. Pad matrix to size n', such that n'=k * 2^(ceiling(log(n) - log(k))) 
 3. Example n=221, k=17 => n' = 17 * ceiling(log(221) - log(17)) = 17 * 16 = 272
 
-ALGORITHM 1: Distributed Strassen Matrix Multiplication  
----
+### ALGORITHM 1: Distributed Strassen Matrix Multiplication  
+
 Procedure DistStrass(RDD < Block > A,RDD < Block > B, int n)  
 Result: RDD of blocks of the product matrix C  
 **.size = Size of matrix A or B  
@@ -68,8 +66,7 @@ single matrix (RDD of blocks (C))*
 end  
 return C**  
 
-ALGORITHM 2: Divide and Replication  
----
+### ALGORITHM 2: Divide and Replication  
 Procedure DivNRep(RDD < Block > A, RDD < Block > B)  
 Result: RDD < Block > C  
 *Make union of two input RDDs. Each block
@@ -96,8 +93,7 @@ divide phase.*
 **RDD < Block > C = group.mapToPair()  
 return C**  
 
-ALGORITHM 3: Block Matrix Multiplication  
----
+### ALGORITHM 3: Block Matrix Multiplication  
 Procedure MulBlockMat(RDD < Block > A, RDD < Block > B)  
 *Result contains RDD of blocks. Each
 block is the product of two matrix
@@ -123,8 +119,7 @@ Block to the resulting RDD.*
 **RDD < Block > C = group.map()  
 return C**  
 
-ALGORITHM 4: Combine Phase  
----
+### ALGORITHM 4: Combine Phase  
 Procedure Combine(RDD < Block > BlockRDD)  
 Result: RDD < Block > C  
 *Map each block to (key,Block) pair. Both
