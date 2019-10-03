@@ -1,15 +1,114 @@
 package com.gigaspaces.strassen
 
-import org.apache.spark.mllib.linalg.distributed.DistributedMatrix
+import breeze.linalg.{DenseMatrix, Matrix}
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd._
+import org.apache.spark.sql.SparkSession
 
-class StrassenMatrixMutliplier {
+import scala.Predef._
+import scala.language.implicitConversions
+import scala.math._
 
-  def multiply (A: DistributedMatrix,B: DistributedMatrix): DistributedMatrix = {
-    null
+
+class StrassenMatrixMultiplier extends Serializable {
+  @transient
+  private val sparkContext: SparkContext = SparkSession.builder().master("local[*]").getOrCreate().sparkContext
+
+  def strassenMultiply (A: Matrix[Double],B: Matrix[Double]): Matrix[Double] = {
+    val n = A.rows
+    require(n == B.rows,"Input matrices must be of equal size")
+    if(n > 0){
+      require(n == A.rows && n == B.rows,"Input matrices must be square matrices")
+    }
+    val recursionLevel: Int = ceil(log(n)/log(2)).toInt
+    val paddedSize = pow(2,recursionLevel).toInt // matrix size is 2^(closest power of 2 larger than n)
+    val paddedA = padMatrixWithZeros(A, n, paddedSize)
+    val paddedB = padMatrixWithZeros(B, n, paddedSize)
+    val blockA = Block(MatrixTag.A, List(StrassenMatrixTag.M), paddedA)
+    val blockB = Block(MatrixTag.B, List(StrassenMatrixTag.M), paddedB)
+    val C = recursiveStrassenMultiplication(blockA,blockB, recursionLevel)
+    stripMatrixOfZeros(recombine(C).matrix, n)
   }
-  def multiply (A: Array[Double],B: Array[Double]): Array[Double] = {
-    null
+
+  def strassenMultiply (matA: Array[Array[Double]],matB:Array[Array[Double]]): Matrix[Double] = {
+    val n = matA.length
+    require(n == matB.length,"Input matrices must be of equal size")
+    if(n > 0){
+      require(n == matA(0).length && n == matB(0).length,"Input matrices must be square matrices")
+    }
+    val originalAMatrix = Matrix.create[Double](n,n,matA.flatten)
+    val originalBMatrix = Matrix.create[Double](n,n,matB.flatten)
+    strassenMultiply(originalAMatrix,originalBMatrix)
   }
+
+  private def recursiveStrassenMultiplication(A: Block, B: Block, recursionLevel: Int): RDD[Block]= {
+    val rddA = sparkContext.parallelize(Seq(A))
+    val rddB = sparkContext.parallelize(Seq(B))
+    val n = A.matrix.rows
+
+    if (n==1){//|| n==pow(2,recursionLevel).toInt) {
+      multiplyRDDs(rddA, rddB)//returns an RDD of computed strassen matrices
+    }
+    mapMatricesToStrassenPairs(rddA, rddB).mapValues(pair => recombine(recursiveStrassenMultiplication(pair.toSeq(0), pair.toSeq(1), recursionLevel - 1))).values
+  }
+
+  private def mapMatricesToStrassenPairs(rddA: RDD[Block], rddB: RDD[Block]) : RDD[(String, Iterable[Block])] = {
+    rddA.union(rddB).flatMap(x => x.splitBlockToStrassenComponents).keyBy(x=>x.tag.mkString(",")).groupByKey()
+  }
+
+  def multiplyRDDs(rddA: RDD[Block], rddB: RDD[Block]): RDD[Block] = {
+    rddA.union(rddB).keyBy(x=>x.tag.mkString(",")).groupByKey().mapValues(pair => {
+      val A = pair.toSeq(0)
+      val B = pair.toSeq(1)
+      Block(MatrixTag.C, A.tag, A.matrix * B.matrix) // serial multiplication
+    }).values
+  }
+
+  private def recombine(rdd: RDD[Block]) : Block = {
+    if(rdd.first().tag.last == StrassenMatrixTag.M){
+      return rdd.first()
+    }
+    val size = rdd.first().matrix.rows
+    var M1,M2,M3,M4,M5,M6,M7: Matrix[Double] = Matrix.zeros(size,size)
+    rdd.toLocalIterator.foreach(block => {
+      val m = block.matrix
+      val lastTag = block.tag.last
+      lastTag match {
+        case StrassenMatrixTag.M1 => M1 := m
+        case StrassenMatrixTag.M2 => M2 := m
+        case StrassenMatrixTag.M3 => M3 := m
+        case StrassenMatrixTag.M4 => M4 := m
+        case StrassenMatrixTag.M5 => M5 := m
+        case StrassenMatrixTag.M6 => M6 := m
+        case StrassenMatrixTag.M7 => M7 := m
+      }
+    })
+    val C11 = M1 + M4 - M5 + M7
+    val C12 = M3 + M5
+    val C21 = M2 + M4
+    val C22 = M1 - M2 + M3 + M6
+    val n = M1.rows * 2
+    val res = DenseMatrix.zeros[Double](n, n)
+
+    res(0 until n/2, 0 until n/2) := C11
+    res(0 until n/2, n/2 until n) := C12
+    res(n/2 until n, 0 until n/2) := C21
+    res(n/2 until n, n/2 until n) := C22
+    val resultTag = rdd.first().tag.reverse.take(1).reverse
+    Block(MatrixTag.C, resultTag, res)
+  }
+
+  private def padMatrixWithZeros(originalMatrix:  Matrix[Double], oldMatrixSize: Int, newMatrixSize: Int) : Matrix[Double] = {
+    val result = Matrix.zeros[Double](newMatrixSize, newMatrixSize)
+    result(0 until oldMatrixSize, 0 until oldMatrixSize) := originalMatrix
+    result
+  }
+
+  private def stripMatrixOfZeros(m: Matrix[Double], newMatrixSize: Int) : Matrix[Double] = {
+    m(0 until newMatrixSize, 0 until newMatrixSize)
+  }
+
+
 
   /*/
   Paramaters:

@@ -17,7 +17,7 @@ To multiply two matrices of size n*n (where n=2^p) A and B:
    1. C11 = (M1 + M4 − M5 + M7)
    2. C12 = (M3 + M5)
    3. C21 = (M2 + M4)
-   4. C22 = (M1 − M2 + M3 - M6)
+   4. C22 = (M1 − M2 + M3 + M6)
 5. This can be performed recursively, each stage runs on n/2 matrix
 
 
