@@ -104,13 +104,13 @@ object Utils {
       val A: Matrix[Double] = Matrix.rand[Double](4,4, Rand.uniform)
       val B: Matrix[Double] = Matrix.rand[Double](4,4, Rand.uniform)
 //      val B = Matrices.rand(4,4, new Random())
-      println(s"A: $A")
-      println(s"B: $B")
+      println(s"~~~~~~~A: $A")
+      println(s"~~~~~~~B: $B")
       val C = A * B
-//      val C = A.multiply(Matrices.dense(B.numRows,B.numCols, B.toArray).asInstanceOf[DenseMatrix])
+      println(s"~~~~~~~C:$C")
+      //      val C = A.multiply(Matrices.dense(B.numRows,B.numCols, B.toArray).asInstanceOf[DenseMatrix])
       val strassenC = new StrassenMatrixMultiplier().strassenMultiply(A,B)
 
-      println(C)
       println(strassenC)
     }
   }
