@@ -29,7 +29,7 @@ class StrassenMatrixMultiplier extends Serializable {
     val blockB = Block(MatrixTag.B, List(StrassenMatrixTag.M), paddedB.toDenseMatrix)
     val C = recursiveStrassenMultiplication(blockA,blockB, paddedSize)
 //    stripMatrixOfZeros(recombine(C).matrix, n)
-    C.first().matrix
+    recombine(C).matrix
   }
 
   def strassenMultiply (matA: Array[Array[Double]],matB:Array[Array[Double]]): Matrix[Double] = {
@@ -49,11 +49,11 @@ class StrassenMatrixMultiplier extends Serializable {
     val rddA = sparkContext.parallelize(Seq(A))
     val rddB = sparkContext.parallelize(Seq(B))
 
-    if (n==1){//|| n==pow(2,recursionLevel).toInt) {
-      multiplyRDDs(rddA, rddB)//returns an RDD of computed strassen matrices
+    if (n==2){//|| n==pow(2,recursionLevel).toInt) {
+      multiplyRDDs(mapMatricesToStrassenPairs(rddA, rddB))//returns an RDD of computed strassen matrices
     }
     else {
-      mapMatricesToStrassenPairs(rddA, rddB).mapValues(pair => recombine(recursiveStrassenMultiplication(pair.toSeq(0), pair.toSeq(1), n/2), n/2)).values
+      mapMatricesToStrassenPairs(rddA, rddB).mapValues(pair => recombine(recursiveStrassenMultiplication(pair.toSeq(0), pair.toSeq(1), n/2))).values
     }
   }
 
@@ -61,15 +61,16 @@ class StrassenMatrixMultiplier extends Serializable {
     rddA.union(rddB).flatMap(x => x.splitBlockToStrassenComponents).keyBy(x=>x.tag.mkString(",")).groupByKey()
   }
 
-  def multiplyRDDs(rddA: RDD[Block], rddB: RDD[Block]): RDD[Block] = {
-    rddA.union(rddB).keyBy(x=>x.tag.mkString(",")).groupByKey().mapValues(pair => {
+  def multiplyRDDs(rdd: RDD[(String, Iterable[Block])]): RDD[Block] = {
+    rdd.mapValues(pair => {
       val A = pair.toSeq(0)
       val B = pair.toSeq(1)
       Block(MatrixTag.C, A.tag, A.matrix * B.matrix) // serial multiplication
     }).values
   }
 
-  private def recombine(rdd: RDD[Block], size: Int) : Block = {
+  private def recombine(rdd: RDD[Block]) : Block = {
+    val size = rdd.first().matrix.rows
     var M1,M2,M3,M4,M5,M6,M7: DenseMatrix[Double] = Matrix.zeros[Double](size,size).toDenseMatrix
     var tags : List[StrassenMatrixTag] = List.empty
     rdd.toLocalIterator.foreach(block => {
