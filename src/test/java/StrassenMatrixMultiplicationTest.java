@@ -7,23 +7,23 @@ import org.junit.Test;
 
 import java.util.Random;
 
-public class StrassenMatrixMulitplicationTest {
+public class StrassenMatrixMultiplicationTest {
     @Test
-    public void testBasicMuliplication(){
+    public void testBasicMultiplication(){
         int n = 5;
-        Matrix A = DenseMatrix.rand(n,n, new Random());
-        Matrix B = DenseMatrix.rand(n,n, new Random());
-        Matrix C = A.multiply((DenseMatrix) Matrices.dense(B.numRows(),B.numCols(), B.toArray()));
+        DenseMatrix A = DenseMatrix.rand(n,n, new Random());
+        DenseMatrix B = DenseMatrix.rand(n,n, new Random());
+        Matrix C = A.multiply(B);
         breeze.linalg.Matrix<Object> strassenC = new StrassenMatrixMultiplier().strassenMultiply(A.asBreeze(), B.asBreeze());
         Assert.assertTrue(isEqual(C,strassenC));
     }
 
     @Test
-    public void testMuliplicationWithRecursion(){
+    public void testMultiplicationWithRecursion(){
         int n = 5;
-        Matrix A = DenseMatrix.rand(n,n, new Random());
-        Matrix B = DenseMatrix.rand(n,n, new Random());
-        Matrix C = A.multiply((DenseMatrix) Matrices.dense(B.numRows(),B.numCols(), B.toArray()));
+        DenseMatrix A = DenseMatrix.rand(n,n, new Random());
+        DenseMatrix B = DenseMatrix.rand(n,n, new Random());
+        Matrix C = A.multiply(B);
         breeze.linalg.Matrix<Object> strassenC = new StrassenMatrixMultiplier().strassenMultiply(A.asBreeze(), B.asBreeze(), 0);
         Assert.assertTrue(isEqual(C,strassenC));
     }

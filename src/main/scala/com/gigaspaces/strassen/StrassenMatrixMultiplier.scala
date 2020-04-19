@@ -11,7 +11,7 @@ import scala.math._
 
 
 class StrassenMatrixMultiplier extends Serializable {
-  def strassenMultiply (A: Matrix[Double],B: Matrix[Double], recursionLevel: Int): Matrix[Double] = {
+  def strassenMultiply(A: Matrix[Double],B: Matrix[Double], recursionLevel: Int): Matrix[Double] = {
     require(A.cols == B.rows,"A number of columns must match B number of rows")
 //    require(newSizeExponent <= recursionLevel, "TBD")
     val (newA, newB) = prepareMatrices(A,B)
@@ -25,13 +25,13 @@ class StrassenMatrixMultiplier extends Serializable {
     strassenMultiply(A, B, maxRecursionLevel(A,B))
   }
 
-  def strassenMultiply (matA: Array[Array[Double]],matB:Array[Array[Double]]): Matrix[Double] = {
+  def strassenMultiply(matA: Array[Array[Double]],matB:Array[Array[Double]]): Matrix[Double] = {
     val A = array2DToMatrix(matA)
     val B = array2DToMatrix(matB)
     strassenMultiply(A,B)
   }
 
-  def strassenMultiply (matA: Array[Array[Double]],matB:Array[Array[Double]], recursionLevel:Int): Matrix[Double] = {
+  def strassenMultiply(matA: Array[Array[Double]],matB:Array[Array[Double]], recursionLevel:Int): Matrix[Double] = {
     val A = array2DToMatrix(matA)
     val B = array2DToMatrix(matB)
     strassenMultiply(A,B, recursionLevel)
