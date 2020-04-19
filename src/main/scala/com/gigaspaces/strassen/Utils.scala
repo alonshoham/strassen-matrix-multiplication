@@ -101,16 +101,11 @@ object Utils {
 //    }
 
     def main(args: Array[String]): Unit = {
-      val A: Matrix[Double] = Matrix.rand[Double](4,4, Rand.uniform)
-      val B: Matrix[Double] = Matrix.rand[Double](4,4, Rand.uniform)
-//      val B = Matrices.rand(4,4, new Random())
-      println(s"~~~~~~~A: $A")
-      println(s"~~~~~~~B: $B")
+      val A: Matrix[Double] = Matrix.rand[Double](2,3, Rand.uniform)
+      val B: Matrix[Double] = Matrix.rand[Double](3,4, Rand.uniform)
       val C = A * B
-      println(s"~~~~~~~C:$C")
-      //      val C = A.multiply(Matrices.dense(B.numRows,B.numCols, B.toArray).asInstanceOf[DenseMatrix])
+      println(C)
       val strassenC = new StrassenMatrixMultiplier().strassenMultiply(A,B)
-
-      println(strassenC)
+      println(strassenC - C)
     }
   }
