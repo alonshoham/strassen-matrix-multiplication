@@ -1,9 +1,6 @@
 import com.gigaspaces.strassen.StrassenMatrixMultiplier;
-import org.apache.spark.SparkConf;
 import org.apache.spark.mllib.linalg.DenseMatrix;
-import org.apache.spark.mllib.linalg.Matrices;
 import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.sql.SparkSession;
 import org.junit.Assert;
 import org.junit.Test;
 

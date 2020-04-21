@@ -11,27 +11,34 @@ import scala.math._
 
 
 class StrassenMatrixMultiplier extends Serializable {
-  def strassenMultiply(A: Matrix[Double],B: Matrix[Double], recursionLevel: Int): Matrix[Double] = {
+  def strassenMultiply(A: Matrix[Double], B: Matrix[Double], recursionLevel: Int): Matrix[Double] = {
     require(A.cols == B.rows,"A number of columns must match B number of rows")
-//    require(newSizeExponent <= recursionLevel, "TBD")
+    //    require(newSizeExponent <= recursionLevel, "TBD")
     val (newA, newB) = prepareMatrices(A,B)
     val blockA = Block(MatrixTag.A, List(StrassenMatrixTag.M), newA)
     val blockB = Block(MatrixTag.B, List(StrassenMatrixTag.M), newB)
-    val C = recursiveStrassenMultiplication(blockA, blockB, recursionLevel)
-    stripMatrixOfZeros(recombine(C,newB.rows).matrix, A.rows, B.cols)
+    val master: String = new SparkConf().get("spark.master", "local[*]")
+    val sparkContext: SparkContext = SparkSession.builder().master(master).getOrCreate().sparkContext
+    val rddA = sparkContext parallelize Seq(blockA)
+    val rddB = sparkContext parallelize Seq(blockB)
+    val splitA = recursiveStrassenSplit(rddA, recursionLevel)
+    val splitB = recursiveStrassenSplit(rddB, recursionLevel)
+    val serial = multiplyRDDs(mapMatricesToStrassenPairs(splitA, splitB))
+    val result = recursiveStrassenCombine(serial, recursionLevel).first().matrix
+    stripMatrixOfZeros(result, A.rows, B.cols)
   }
 
-  def strassenMultiply(A: Matrix[Double],B: Matrix[Double]): Matrix[Double] = {
+  def strassenMultiply(A: Matrix[Double], B: Matrix[Double]): Matrix[Double] = {
     strassenMultiply(A, B, maxRecursionLevel(A,B))
   }
 
-  def strassenMultiply(matA: Array[Array[Double]],matB:Array[Array[Double]]): Matrix[Double] = {
+  def strassenMultiply(matA: Array[Array[Double]], matB:Array[Array[Double]]): Matrix[Double] = {
     val A = array2DToMatrix(matA)
     val B = array2DToMatrix(matB)
     strassenMultiply(A,B)
   }
 
-  def strassenMultiply(matA: Array[Array[Double]],matB:Array[Array[Double]], recursionLevel:Int): Matrix[Double] = {
+  def strassenMultiply(matA: Array[Array[Double]], matB:Array[Array[Double]], recursionLevel:Int): Matrix[Double] = {
     val A = array2DToMatrix(matA)
     val B = array2DToMatrix(matB)
     strassenMultiply(A,B, recursionLevel)
@@ -63,21 +70,6 @@ class StrassenMatrixMultiplier extends Serializable {
     val max = Math.max(Math.max(n,m),p)
     32 - Integer.numberOfLeadingZeros(max - 1)
   }
-
-  private def recursiveStrassenMultiplication(A: Block, B: Block, recursionLevel: Int): RDD[Block]= {
-    val master: String = new SparkConf().get("spark.master", "local[*]")
-    val sparkContext: SparkContext = SparkSession.builder().master(master).getOrCreate().sparkContext
-    val n = A.matrix.rows
-    val rddA = sparkContext parallelize Seq(A)
-    val rddB = sparkContext parallelize Seq(B)
-    if (recursionLevel == 0) {
-      multiplyRDDs(mapMatricesToStrassenPairs(rddA, rddB))
-    }
-    else {
-      mapMatricesToStrassenPairs(rddA, rddB).mapValues(pair => recombine(recursiveStrassenMultiplication(pair.toSeq.head, pair.toSeq(1), recursionLevel - 1), n/2)).values
-    }
-  }
-
   private def mapMatricesToStrassenPairs(rddA: RDD[Block], rddB: RDD[Block]) : RDD[(String, Iterable[Block])] = {
     rddA.union(rddB).flatMap(x => splitBlockToStrassenComponents(x)).keyBy(x=>x.tag.mkString(",")).groupByKey()
   }
@@ -90,34 +82,6 @@ class StrassenMatrixMultiplier extends Serializable {
     }).values
   }
 
-  private def recombine(rdd: RDD[Block], n: Int) : Block = {
-    var M1,M2,M3,M4,M5,M6,M7: DenseMatrix[Double] = Matrix.zeros[Double](n/2,n/2).toDenseMatrix
-    var tags : List[StrassenMatrixTag] = List.empty
-    rdd.toLocalIterator.foreach(block => {
-      tags = block.tag
-      val m = block.matrix
-      val lastTag = block.tag.last
-      lastTag match {
-        case StrassenMatrixTag.M1 => M1 := m
-        case StrassenMatrixTag.M2 => M2 := m
-        case StrassenMatrixTag.M3 => M3 := m
-        case StrassenMatrixTag.M4 => M4 := m
-        case StrassenMatrixTag.M5 => M5 := m
-        case StrassenMatrixTag.M6 => M6 := m
-        case StrassenMatrixTag.M7 => M7 := m
-      }
-    })
-    val res = DenseMatrix.zeros[Double](n, n)
-
-    res(0 until n/2, 0 until n/2) := M1 + M4 - M5 + M7 //C11
-    res(0 until n/2, n/2 until n) := M3 + M5 //C12
-    res(n/2 until n, 0 until n/2) := M2 + M4 //C21
-    res(n/2 until n, n/2 until n) := M1 - M2 + M3 + M6 //C22
-
-    val block = Block(MatrixTag.C, tags.take(tags.size - 1), res)
-    block
-  }
-
   private def padMatrixWithZeros(originalMatrix:  Matrix[Double], newMatrixSize: Int) : DenseMatrix[Double] = {
     val result = Matrix.zeros[Double](newMatrixSize, newMatrixSize)
     result(0 until originalMatrix.rows, 0 until originalMatrix.cols) := originalMatrix
@@ -128,7 +92,7 @@ class StrassenMatrixMultiplier extends Serializable {
     m(0 until newMatrixRows, 0 until newMatrixColumns)
   }
 
-  private def splitBlockToStrassenComponents(block: Block): List[Block] = {
+  private def splitBlockToStrassenComponents(block: Block): Iterable[Block] = {
     val matrix = block.matrix
     val matrixTag = block.matrixTag
     val tag = block.tag
@@ -156,6 +120,48 @@ class StrassenMatrixMultiplier extends Serializable {
         Block(matrixTag, tag ++ List(StrassenMatrixTag.M7), matrix21 + matrix22))
     }
     result
+  }
+
+  private def combineStrassenComponents(blocks: Iterable[Block]): Block = {
+    val n = blocks.head.matrix.rows
+    var M1,M2,M3,M4,M5,M6,M7: DenseMatrix[Double] = Matrix.zeros[Double](n,n).toDenseMatrix
+    var tags : List[StrassenMatrixTag] = List.empty
+    blocks.foreach(block => {
+      tags = block.tag
+      val m = block.matrix
+      val lastTag = block.tag.last
+      lastTag match {
+        case StrassenMatrixTag.M1 => M1 := m
+        case StrassenMatrixTag.M2 => M2 := m
+        case StrassenMatrixTag.M3 => M3 := m
+        case StrassenMatrixTag.M4 => M4 := m
+        case StrassenMatrixTag.M5 => M5 := m
+        case StrassenMatrixTag.M6 => M6 := m
+        case StrassenMatrixTag.M7 => M7 := m
+      }
+    })
+    val res = DenseMatrix.zeros[Double](2*n, 2*n)
+
+    res(0 until n, 0 until n) := M1 + M4 - M5 + M7 //C11
+    res(0 until n, n until 2*n) := M3 + M5 //C12
+    res(n until 2*n, 0 until n) := M2 + M4 //C21
+    res(n until 2*n, n until 2*n) := M1 - M2 + M3 + M6 //C22
+
+    val block = Block(MatrixTag.C, tags.take(tags.size - 1), res)
+    block
+  }
+
+  private def recursiveStrassenSplit(rdd: RDD[Block], recursionLevel: Int): RDD[Block] = {
+    if(recursionLevel==0)
+      return rdd
+    recursiveStrassenSplit(rdd.flatMap(block => splitBlockToStrassenComponents(block)), recursionLevel - 1)
+  }
+
+  private def recursiveStrassenCombine(rdd: RDD[Block], recursionLevel: Int): RDD[Block] = {
+    val result = rdd.keyBy(block => block.parentTags()).groupByKey().values.map(blocks => combineStrassenComponents(blocks))
+    if(recursionLevel == 0)
+      return result
+    recursiveStrassenCombine(result, recursionLevel - 1)
   }
 
 
