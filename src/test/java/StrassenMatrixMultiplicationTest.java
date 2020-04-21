@@ -1,7 +1,9 @@
 import com.gigaspaces.strassen.StrassenMatrixMultiplier;
+import org.apache.spark.SparkConf;
 import org.apache.spark.mllib.linalg.DenseMatrix;
 import org.apache.spark.mllib.linalg.Matrices;
 import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.sql.SparkSession;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -20,11 +22,11 @@ public class StrassenMatrixMultiplicationTest {
 
     @Test
     public void testMultiplicationWithRecursion(){
-        int n = 5;
+        int n = 32;
         DenseMatrix A = DenseMatrix.rand(n,n, new Random());
         DenseMatrix B = DenseMatrix.rand(n,n, new Random());
         Matrix C = A.multiply(B);
-        breeze.linalg.Matrix<Object> strassenC = new StrassenMatrixMultiplier().strassenMultiply(A.asBreeze(), B.asBreeze(), 0);
+        breeze.linalg.Matrix<Object> strassenC = new StrassenMatrixMultiplier().strassenMultiply(A.asBreeze(), B.asBreeze(), 2);
         Assert.assertTrue(isEqual(C,strassenC));
     }
 
@@ -36,7 +38,6 @@ public class StrassenMatrixMultiplicationTest {
                 if(Math.abs(diff) >= 1e-13){
                     return false;
                 }
-
             }
         }
         return true;

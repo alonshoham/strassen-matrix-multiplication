@@ -2,7 +2,7 @@ package com.gigaspaces.strassen
 
 import breeze.linalg.{DenseMatrix, Matrix}
 import com.gigaspaces.strassen.StrassenMatrixTag.StrassenMatrixTag
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd._
 import org.apache.spark.sql.SparkSession
 
@@ -65,7 +65,8 @@ class StrassenMatrixMultiplier extends Serializable {
   }
 
   private def recursiveStrassenMultiplication(A: Block, B: Block, recursionLevel: Int): RDD[Block]= {
-    val sparkContext: SparkContext = SparkSession.builder().master("local[*]").getOrCreate().sparkContext
+    val master: String = new SparkConf().get("spark.master", "local[*]")
+    val sparkContext: SparkContext = SparkSession.builder().master(master).getOrCreate().sparkContext
     val n = A.matrix.rows
     val rddA = sparkContext parallelize Seq(A)
     val rddB = sparkContext parallelize Seq(B)
@@ -106,16 +107,12 @@ class StrassenMatrixMultiplier extends Serializable {
         case StrassenMatrixTag.M7 => M7 := m
       }
     })
-    val C11 = M1 + M4 - M5 + M7
-    val C12 = M3 + M5
-    val C21 = M2 + M4
-    val C22 = M1 - M2 + M3 + M6
     val res = DenseMatrix.zeros[Double](n, n)
 
-    res(0 until n/2, 0 until n/2) := C11
-    res(0 until n/2, n/2 until n) := C12
-    res(n/2 until n, 0 until n/2) := C21
-    res(n/2 until n, n/2 until n) := C22
+    res(0 until n/2, 0 until n/2) := M1 + M4 - M5 + M7 //C11
+    res(0 until n/2, n/2 until n) := M3 + M5 //C12
+    res(n/2 until n, 0 until n/2) := M2 + M4 //C21
+    res(n/2 until n, n/2 until n) := M1 - M2 + M3 + M6 //C22
 
     val block = Block(MatrixTag.C, tags.take(tags.size - 1), res)
     block
